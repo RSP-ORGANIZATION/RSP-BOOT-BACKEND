@@ -1,4 +1,6 @@
+import { request } from "express";
 import { Recipe } from "../schemas/recipe-schema.js";
+import { Favorite } from "../schemas/favorite-schema.js";
 
 export const addRecipe = async (request, response) => {
   const { title, steps, ingredients, imageUrl, description } = request.body;
@@ -38,7 +40,7 @@ export const getAllRecipes = async (request, response) => {
 export const getFilteredItems = async (request, response) => {
   const { item } = request.body;
   if (!item) {
-    return response.statu(400).json({ message: "Bad Request" });
+    return response.status(400).json({ message: "Bad Request" });
   }
   try {
     const items = await Recipe.find({ title: { $regex: item, $options: "i" } });
@@ -51,20 +53,45 @@ export const getFilteredItems = async (request, response) => {
 
 export const getFavoriteRecipes = async (request, response) => {
   try {
-    const userId = req.params.userId;
+    const { userPhone } = request.body;
+    console.log("userPhone:", userPhone);
 
-    // Find favorite recipe IDs for the user
-    const favoriteDoc = await Favorite.findOne({ userId });
-
-    if (!favoriteDoc || favoriteDoc.recipeIds.length === 0) {
-      return res.status(200).json({ recipes: [] }); // Return empty if no favorites
+    if (!userPhone) {
+      return response.status(400).json({ message: "Bad Request" });
     }
-
-    // Fetch full recipe details using the stored IDs
+    const favoriteDoc = await Favorite.findOne({ userPhone: userPhone });
+    if (!favoriteDoc || favoriteDoc.recipeIds.length === 0) {
+      return response.status(404).json({ recipes: [] });
+    }
     const recipes = await Recipe.find({ _id: { $in: favoriteDoc.recipeIds } });
-
-    res.status(200).json({ recipes });
+    console.log("Recipes:", recipes);
+    return response.json({ message: "Favorites fetched", favorites: recipes });
   } catch (error) {
-    return response.status(500).json({ message: "Error fetching favorites" });
+    console.log("getFavoriteRecipes error:", error);
+    return response.status(500).json({ message: "Something went wrong" });
+  }
+};
+
+export const addFavoriteRecipe = async (request, response) => {
+  const { userPhone, recipeId } = request.body;
+  console.log("userPhone:", userPhone, "recipeId:", recipeId);
+
+  if (!userPhone || !recipeId) {
+    return response.status(400).json({ message: "Bad Request" });
+  }
+  try {
+    const favoriteDoc = await Favorite.findOne({ userPhone: userPhone });
+    if (!favoriteDoc) {
+      await Favorite.create({ userPhone: userPhone, recipeIds: [recipeId] });
+    } else {
+      if (!favoriteDoc.recipeIds.includes(recipeId)) {
+        favoriteDoc.recipeIds.push(recipeId);
+        await favoriteDoc.save();
+      }
+    }
+    return response.json({ message: "Recipe added to favorites" });
+  } catch (error) {
+    console.log("Error:", error);
+    return response.status(500).json({ message: "Something went wrong" });
   }
 };
